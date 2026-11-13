@@ -1,0 +1,240 @@
+# Due Manager API
+
+A Django REST API for managing tasks and due dates with JWT authentication.
+
+## Features
+
+- ✅ User registration and authentication
+- ✅ JWT token-based authentication
+- ✅ Token refresh and blacklisting
+- ✅ User profile management
+- ✅ Global exception handling
+- ✅ Custom error responses
+- ✅ API rate limiting (60 requests/minute)
+- ✅ 404 handling for API routes
+- ✅ JSON-only responses
+- ✅ API documentation (Swagger/OpenAPI)
+- ✅ Comprehensive test coverage (28 tests)
+
+## Tech Stack
+
+- Django 6.1.3
+- Django REST Framework 3.18.3
+- Simple JWT 5.5.1
+- drf-spectacular 0.30.0
+- Python 3.14
+
+## Setup
+
+1. Install dependencies:
+```bash
+uv pip install -e .
+```
+
+2. Run migrations:
+```bash
+python manage.py migrate
+```
+
+3. Start the development server:
+```bash
+python manage.py runserver
+```
+
+## API Endpoints
+
+### Authentication
+
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| POST | `/api/accounts/register/` | Register new user | No |
+| POST | `/api/accounts/login/` | Login with username/password | No |
+| POST | `/api/accounts/logout/` | Logout (blacklist token) | Yes |
+| GET/PATCH | `/api/accounts/profile/` | Get/update user profile | Yes |
+| POST | `/api/accounts/token/refresh/` | Refresh access token | No |
+
+### API Documentation
+
+- Swagger UI: `http://localhost:8000/api/docs/`
+- OpenAPI Schema: `http://localhost:8000/api/schema/`
+
+## API Usage Examples
+
+### Register a new user
+
+```bash
+curl -X POST http://localhost:8000/api/accounts/register/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "johndoe",
+    "password": "securepass123",
+    "password_confirm": "securepass123",
+    "first_name": "John",
+    "last_name": "Doe"
+  }'
+```
+
+Response:
+```json
+{
+  "user": {
+    "id": 1,
+    "username": "johndoe",
+    "first_name": "John",
+    "last_name": "Doe",
+    "date_joined": "2026-11-13T09:35:00Z"
+  },
+  "access": "eyJ0eXAiOiJKV1QiLCJhbGc...",
+  "refresh": "eyJ0eXAiOiJKV1QiLCJhbGc..."
+}
+```
+
+### Login
+
+```bash
+curl -X POST http://localhost:8000/api/accounts/login/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "johndoe",
+    "password": "securepass123"
+  }'
+```
+
+### Get user profile
+
+```bash
+curl -X GET http://localhost:8000/api/accounts/profile/ \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+### Update profile
+
+```bash
+curl -X PATCH http://localhost:8000/api/accounts/profile/ \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "first_name": "Jane",
+    "last_name": "Smith"
+  }'
+```
+
+### Refresh access token
+
+```bash
+curl -X POST http://localhost:8000/api/accounts/token/refresh/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "refresh": "YOUR_REFRESH_TOKEN"
+  }'
+```
+
+### Logout
+
+```bash
+curl -X POST http://localhost:8000/api/accounts/logout/ \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "refresh": "YOUR_REFRESH_TOKEN"
+  }'
+```
+
+## Authentication Flow
+
+1. **Register** or **Login** to receive access and refresh tokens
+2. Include the **access token** in the `Authorization` header for authenticated requests:
+   ```
+   Authorization: Bearer YOUR_ACCESS_TOKEN
+   ```
+3. When the access token expires (1 hour), use the **refresh token** to get a new one
+4. Refresh tokens are valid for 7 days and automatically rotate on refresh
+5. **Logout** blacklists the refresh token to prevent further use
+
+## Testing
+
+Run the test suite:
+```bash
+python manage.py test
+```
+
+**Test Coverage: 28 tests**
+- 21 tests for accounts app (authentication, registration, profile)
+- 7 tests for core app (exception handling, 404 responses)
+
+All tests cover:
+- User registration (success, validation, duplicates)
+- Login/logout (success, invalid credentials)
+- Token refresh (valid/invalid tokens)
+- Profile management (get/update, authenticated/unauthenticated)
+- Global exception handling
+- Custom error responses
+- API 404 handling
+- Authentication flow end-to-end
+
+## Project Structure
+
+```
+due_manager/
+├── accounts/              # Authentication app
+│   ├── serializers.py    # User, Register, Login serializers
+│   ├── views.py          # API views
+│   ├── urls.py           # URL routing
+│   └── tests.py          # API test cases (21 tests)
+├── core/                 # Core utilities
+│   ├── exceptions.py     # Global exception handler & custom Error class
+│   ├── views.py          # API 404 fallback view
+│   └── tests.py          # Core test cases (7 tests)
+├── due_manager/          # Project settings
+│   ├── settings.py       # Django settings
+│   └── urls.py           # Main URL configuration
+└── manage.py             # Django CLI
+```
+
+## Error Handling
+
+The API uses a global exception handler for consistent error responses:
+
+### Custom Error Class
+
+```python
+from core.exceptions import Error
+from rest_framework import status
+
+# Raise custom errors in your views
+raise Error("Invalid operation", status_code=status.HTTP_403_FORBIDDEN)
+```
+
+### 404 Responses
+
+All unhandled `/api/*` routes return a DRF-formatted 404:
+```json
+{
+  "detail": "The resource you are looking for is not found."
+}
+```
+
+### Rate Limiting
+
+Default rate limit: **60 requests per minute** per user (configurable in settings.py)
+
+## Security Notes
+
+- Uses Django's default User model (username-based, no email required)
+- Passwords are hashed with Django's default hasher
+- JWT tokens with HS256 algorithm
+- Refresh token blacklisting enabled
+- CSRF protection for session-based auth
+- Change `SECRET_KEY` in production
+- Set `DEBUG = False` in production
+- Configure `ALLOWED_HOSTS` appropriately
+
+## Next Steps
+
+- [ ] Add password reset functionality
+- [ ] Implement task models and endpoints
+- [ ] Add due date reminders
+- [ ] Set up user permissions
+- [ ] Configure production database (PostgreSQL)
+- [ ] Add API rate limiting
+- [ ] Set up CORS for frontend integration
