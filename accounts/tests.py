@@ -260,3 +260,25 @@ class AccountsAPITestCase(APITestCase):
         response = self.client.get(self.profile_url)
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_username_cannot_be_updated(self):
+        """Test that username is read-only and cannot be updated after registration."""
+        login_response = self.client.post(self.login_url, self.valid_login_data)
+        access_token = login_response.data['access']
+
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {access_token}')
+        response = self.client.patch(self.profile_url, {
+            'username': 'newusername',
+            'first_name': 'Updated',
+            'last_name': 'Name'
+        })
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # Username stays unchanged
+        self.assertEqual(response.data['username'], 'testuser')
+        # Other fields updated
+        self.assertEqual(response.data['first_name'], 'Updated')
+        self.assertEqual(response.data['last_name'], 'Name')
+        # Verify in DB
+        self.test_user.refresh_from_db()
+        self.assertEqual(self.test_user.username, 'testuser')
