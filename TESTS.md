@@ -21,6 +21,10 @@ Tests for core exception handling and error responses.
 - **test_custom_error_exception_with_status_code** - Test Error exception with custom status code
 - **test_custom_error_exception_with_both** - Test Error exception with both custom detail and status code
 
+---
+
+## Customer App Tests (`customer/tests.py`)
+
 ### CustomerModelTestCase
 Tests for Customer model attributes, validation, relationships, and balance calculations.
 - **test_create_customer_with_all_fields** - Test creating customer with user, name, phone_number, and address
@@ -34,6 +38,10 @@ Tests for Customer model attributes, validation, relationships, and balance calc
 - **test_total_due_amount_with_excess_deposit** - Balance returns negative when deposits exceed dues
 - **test_total_due_amount_without_deposits_flag** - Optional flag to compute gross due amount without subtracting deposits
 
+---
+
+## Product App Tests (`product/tests.py`)
+
 ### ProductModelTestCase
 Tests for Product model attributes, units, prices, and deduplication rules.
 - **test_create_product** - Test creating product with title, quantity, unit, and price
@@ -41,6 +49,10 @@ Tests for Product model attributes, units, prices, and deduplication rules.
 - **test_duplicate_products_allowed** - Verify multiple products can share the same name and price
 - **test_title_max_length_validation** - Verify title field enforces max length of 100 characters
 - **test_default_values** - Verify default quantity, unit, and price values
+
+---
+
+## Due App Tests (`due/tests.py`)
 
 ### DueModelTestCase
 Tests for Due model creation, relationships, and discount amount overrides.
