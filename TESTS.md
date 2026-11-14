@@ -21,6 +21,45 @@ Tests for core exception handling and error responses.
 - **test_custom_error_exception_with_status_code** - Test Error exception with custom status code
 - **test_custom_error_exception_with_both** - Test Error exception with both custom detail and status code
 
+### CustomerModelTestCase
+Tests for Customer model attributes, validation, relationships, and balance calculations.
+- **test_create_customer_with_all_fields** - Test creating customer with user, name, phone_number, and address
+- **test_customer_optional_fields** - Test creating customer with optional fields omitted
+- **test_one_user_can_have_many_customers** - Verify 1-to-many relationship between User and Customer
+- **test_name_max_length_validation** - Verify name field enforces max length of 30 characters
+- **test_total_due_amount_with_no_dues_and_no_deposits** - Initial balance is 0
+- **test_total_due_amount_with_only_dues** - Balance reflects sum of all dues
+- **test_total_due_amount_with_dues_and_deposits** - Balance reflects dues minus deposits
+- **test_total_due_amount_when_fully_paid** - Balance returns 0 when dues equals deposits
+- **test_total_due_amount_with_excess_deposit** - Balance returns negative when deposits exceed dues
+- **test_total_due_amount_without_deposits_flag** - Optional flag to compute gross due amount without subtracting deposits
+
+### ProductModelTestCase
+Tests for Product model attributes, units, prices, and deduplication rules.
+- **test_create_product** - Test creating product with title, quantity, unit, and price
+- **test_product_units** - Test supported unit choices (gram, pice, piece)
+- **test_duplicate_products_allowed** - Verify multiple products can share the same name and price
+- **test_title_max_length_validation** - Verify title field enforces max length of 100 characters
+- **test_default_values** - Verify default quantity, unit, and price values
+
+### DueModelTestCase
+Tests for Due model creation, relationships, and discount amount overrides.
+- **test_create_due_with_products** - Test creating due with multiple products and custom amount
+- **test_one_due_can_have_many_products** - Verify 1-to-many / M2M relationship between Due and Products
+- **test_one_customer_can_have_many_dues** - Verify 1-to-many relationship between Customer and Dues
+- **test_due_amount_may_differ_from_sum_of_product_prices** - Verify shopkeeper discount / custom amount
+- **test_is_edited_flag** - Verify is_edited boolean flag defaulting to False and updateable to True
+- **test_custom_date** - Test recording due with a specific historical date
+
+### DepositModelTestCase
+Tests for Deposit model creation, amounts, and dates.
+- **test_create_deposit** - Test creating deposit with customer, amount, and date
+- **test_one_customer_can_have_many_deposits** - Verify 1-to-many relationship between Customer and Deposits
+- **test_custom_deposit_date** - Test recording deposit with a specific historical date
+
+### DueManagerWorkflowTestCase
+- **test_complete_due_and_deposit_lifecycle** - End-to-end integration test verifying day-by-day due tracking, deposits, running balance, and cascade deletion
+
 ---
 
 ## Accounts App Tests (`accounts/tests.py`)
@@ -87,14 +126,15 @@ uv run python manage.py test accounts.tests.AccountsAPITestCase.test_login_succe
 ## Test Coverage Summary
 
 ### Core App
-- **Total Tests**: 7
-- **Coverage**: Exception handling, custom error classes, 404 responses
+- **Total Tests**: 32
+- **Coverage**: Exception handling, custom error classes, 404 responses, Customer, Product, Due, Deposit models, validation, and due/deposit lifecycle calculations
 
 ### Accounts App
-- **Total Tests**: 23
+- **Total Tests**: 22
 - **Coverage**: Registration, login, logout, token management, profile CRUD, authorization
 
 ### Overall
-- **Total Tests**: 30
+- **Total Tests**: 54
 - **Authentication**: JWT-based with token blacklisting
 - **API**: RESTful endpoints with proper status codes
+- **Models**: Business logic, relationships, calculations, and constraints
