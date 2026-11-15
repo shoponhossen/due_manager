@@ -225,57 +225,23 @@ class CustomerAPITestCase(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
-    def test_update_customer_details(self):
-        """User can update customer name, phone_number, and address."""
-        c = Customer.objects.create(user=self.user1, name="Original Name", address="Old Address")
-        payload = {
-            "name": "Updated Name",
-            "phone_number": "01799999999",
-            "address": "New Address",
-        }
-        response = self.client.patch(f"/api/customers/{c.id}/", payload)
+    def test_customer_cannot_be_edited(self):
+        """Customers cannot be edited (PATCH/PUT returns 405 Method Not Allowed)."""
+        c = Customer.objects.create(user=self.user1, name="Original Name")
+        patch_response = self.client.patch(f"/api/customers/{c.id}/", {"name": "Changed"})
+        self.assertEqual(patch_response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["name"], "Updated Name")
-        self.assertEqual(response.data["phone_number"], "01799999999")
-        self.assertEqual(response.data["address"], "New Address")
+        put_response = self.client.put(f"/api/customers/{c.id}/", {"name": "Changed"})
+        self.assertEqual(put_response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
 
-    def test_update_customer_cannot_modify_total_due_amount(self):
-        """total_due_amount is read-only and cannot be altered by the user."""
-        c = Customer.objects.create(user=self.user1, name="Balance Cust")
-        Due.objects.create(customer=c, amount=500)
+        # Name in DB is unchanged
+        c.refresh_from_db()
+        self.assertEqual(c.name, "Original Name")
 
-        # Attempt to overwrite total_due_amount to 0 or 99999
-        payload = {
-            "name": "Balance Cust",
-            "total_due_amount": 99999,
-        }
-        response = self.client.patch(f"/api/customers/{c.id}/", payload)
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        # Should remain 500, not 99999
-        self.assertEqual(response.data["total_due_amount"], 500)
-        self.assertEqual(c.total_due_amount(), 500)
-
-    def test_update_customer_other_user_forbidden(self):
-        """User cannot edit another user's customer (returns 404)."""
-        other_customer = Customer.objects.create(user=self.user2, name="Other Cust")
-        response = self.client.patch(f"/api/customers/{other_customer.id}/", {"name": "Hacked"})
-
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-
-    def test_delete_customer_success(self):
-        """User can delete their customer."""
-        c = Customer.objects.create(user=self.user1, name="To Delete")
+    def test_customer_cannot_be_deleted(self):
+        """Customers cannot be deleted (DELETE returns 405 Method Not Allowed)."""
+        c = Customer.objects.create(user=self.user1, name="Protected Customer")
         response = self.client.delete(f"/api/customers/{c.id}/")
 
-        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
-        self.assertFalse(Customer.objects.filter(id=c.id).exists())
-
-    def test_delete_customer_other_user_forbidden(self):
-        """User cannot delete another user's customer (returns 404)."""
-        other_customer = Customer.objects.create(user=self.user2, name="Other Cust")
-        response = self.client.delete(f"/api/customers/{other_customer.id}/")
-
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertTrue(Customer.objects.filter(id=other_customer.id).exists())
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertTrue(Customer.objects.filter(id=c.id).exists())

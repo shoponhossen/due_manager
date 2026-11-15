@@ -1,16 +1,26 @@
-from rest_framework import viewsets, permissions, status
-from rest_framework.response import Response
-from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiResponse
+from rest_framework import viewsets, permissions, mixins
+from rest_framework.exceptions import ValidationError, NotFound
+from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
 
 from .models import Due
 from .serializers import DueSerializer
+from customer.models import Customer
 
 
 @extend_schema_view(
     list=extend_schema(
-        summary="List dues",
-        description="Retrieve all dues recorded for the authenticated shopkeeper's customers.",
+        summary="List dues for a customer",
+        description="Retrieve all dues associated with a specific customer belonging to the authenticated shopkeeper. Requires customer_id query parameter.",
         tags=["Dues"],
+        parameters=[
+            OpenApiParameter(
+                name="customer_id",
+                type=int,
+                location=OpenApiParameter.QUERY,
+                required=True,
+                description="ID of the shopkeeper's customer whose dues to retrieve",
+            )
+        ],
         responses={200: DueSerializer(many=True)},
     ),
     retrieve=extend_schema(
@@ -21,28 +31,50 @@ from .serializers import DueSerializer
     ),
     create=extend_schema(
         summary="Add Due",
-        description="Record a new due balance for a customer. Provide customer_id, amount, and itemized product(s) in a single request. date is automatically assigned and is_edited cannot be altered by the user.",
+        description="Record a new due balance for a customer. Provide customer_id, amount, and itemized product(s) in a single request. date and is_edited are automatic and cannot be altered. Dues cannot be edited or deleted once created.",
         tags=["Dues"],
         request=DueSerializer,
         responses={201: DueSerializer},
     ),
-    destroy=extend_schema(
-        summary="Delete due",
-        description="Delete a due entry.",
-        tags=["Dues"],
-        responses={204: OpenApiResponse(description="Due deleted successfully")},
-    ),
 )
-class DueViewSet(viewsets.ModelViewSet):
+class DueViewSet(
+    mixins.CreateModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.ListModelMixin,
+    viewsets.GenericViewSet,
+):
     """
     ViewSet for recording and viewing Dues.
+    Editing and deleting are strictly disallowed.
+    Listing dues requires a customer_id query param for isolation.
     Restricted to authenticated shopkeepers.
     """
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = DueSerializer
-    http_method_names = ["get", "post", "delete", "head", "options"]
+    http_method_names = ["get", "post", "head", "options"]
 
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
             return Due.objects.none()
-        return Due.objects.filter(customer__user=self.request.user).select_related("customer").prefetch_related("products")
+
+        user = self.request.user
+        queryset = Due.objects.filter(customer__user=user).select_related("customer").prefetch_related("products")
+
+        # When listing dues, require customer_id and verify customer ownership
+        if self.action == "list":
+            customer_param = self.request.query_params.get("customer_id") or self.request.query_params.get("customer")
+            if not customer_param:
+                raise ValidationError({"customer_id": ["customer_id query parameter is required."]})
+
+            try:
+                customer_id = int(customer_param)
+            except (ValueError, TypeError):
+                raise ValidationError({"customer_id": ["customer_id must be a valid integer."]})
+
+            # Security: verify the customer exists and belongs to the authenticated user
+            if not Customer.objects.filter(id=customer_id, user=user).exists():
+                raise NotFound(detail="Customer not found.")
+
+            queryset = queryset.filter(customer_id=customer_id)
+
+        return queryset

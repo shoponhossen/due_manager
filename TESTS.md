@@ -39,7 +39,7 @@ Tests for Customer model attributes, validation, relationships, and balance calc
 - **test_total_due_amount_without_deposits_flag** - Optional flag to compute gross due amount without subtracting deposits
 
 ### CustomerAPITestCase
-Tests for Customer CRUD REST endpoints.
+Tests for Customer REST endpoints.
 - **test_create_customer_success** - Shopkeeper creates customer with all details; total_due_amount starts at 0
 - **test_create_customer_minimal_fields** - Create customer with only required name field
 - **test_create_customer_missing_name** - Validation error when name is missing
@@ -49,11 +49,8 @@ Tests for Customer CRUD REST endpoints.
 - **test_list_customers_multi_tenancy_isolation** - Shopkeeper only sees their own customers
 - **test_customer_detail_view** - Detail view returns address, phone_number, and total_due_amount
 - **test_customer_detail_other_user_forbidden** - Accessing another shopkeeper's customer returns 404
-- **test_update_customer_details** - Update name, phone_number, address
-- **test_update_customer_cannot_modify_total_due_amount** - total_due_amount is read-only and ignores user modification attempts
-- **test_update_customer_other_user_forbidden** - Updating another shopkeeper's customer returns 404
-- **test_delete_customer_success** - Deleting customer removes customer record
-- **test_delete_customer_other_user_forbidden** - Deleting another shopkeeper's customer returns 404
+- **test_customer_cannot_be_edited** - Customers cannot be edited (PATCH/PUT returns 405 Method Not Allowed)
+- **test_customer_cannot_be_deleted** - Customers cannot be deleted (DELETE returns 405 Method Not Allowed)
 
 ---
 
@@ -99,7 +96,12 @@ Tests for Due REST API endpoints.
 - **test_add_due_invalid_customer** - Fails when customer_id does not exist
 - **test_add_due_other_users_customer_forbidden** - Fails when customer belongs to another shopkeeper
 - **test_add_due_unauthenticated** - Returns 401 when unauthenticated
-- **test_list_dues_multi_tenancy** - Shopkeeper only retrieves dues for their own customers
+- **test_list_dues_requires_customer_id** - Listing dues requires a customer_id query parameter
+- **test_list_dues_with_customer_id** - Listing dues with customer_id returns all dues for that customer
+- **test_list_dues_other_users_customer_returns_404** - User cannot query another user's customer dues (returns 404)
+- **test_due_cannot_be_edited** - Dues cannot be edited (PUT/PATCH returns 405 Method Not Allowed)
+- **test_due_cannot_be_deleted** - Dues cannot be deleted (DELETE returns 405 Method Not Allowed)
+- **test_due_detail_other_user_forbidden** - User cannot retrieve detail of another user's due (returns 404)
 - **test_due_detail_view** - Detail view returns full product and customer data
 
 ---

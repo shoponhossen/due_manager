@@ -14,7 +14,7 @@ A Django REST API for managing tasks and due dates with JWT authentication.
 - ✅ 404 handling for API routes
 - ✅ JSON-only responses
 - ✅ API documentation (Swagger/OpenAPI)
-- ✅ Comprehensive test coverage (78 tests)
+- ✅ Comprehensive test coverage (80 tests)
 
 ## Tech Stack
 
@@ -58,19 +58,16 @@ python manage.py runserver
 | Method | Endpoint | Description | Auth Required |
 |--------|----------|-------------|---------------|
 | GET | `/api/customers/` | List customers (`name`, `phone_number`, `total_due_amount`) | Yes |
-| POST | `/api/customers/` | Create new customer | Yes |
+| POST | `/api/customers/` | Create new customer (cannot be edited or deleted once created) | Yes |
 | GET | `/api/customers/{id}/` | Get customer details (including address, due balance) | Yes |
-| PATCH/PUT | `/api/customers/{id}/` | Update customer details (`total_due_amount` is read-only) | Yes |
-| DELETE | `/api/customers/{id}/` | Delete customer and cascading records | Yes |
 
 ### Dues
 
 | Method | Endpoint | Description | Auth Required |
 |--------|----------|-------------|---------------|
-| GET | `/api/dues/` | List dues for shopkeeper's customers | Yes |
-| POST | `/api/dues/` | Add due (customer_id, products, amount; date and is_edited are automatic) | Yes |
+| GET | `/api/dues/?customer_id={id}` | List all dues for a specific customer belonging to the shopkeeper | Yes |
+| POST | `/api/dues/` | Add due (customer_id, products, amount; cannot be edited or deleted) | Yes |
 | GET | `/api/dues/{id}/` | Get due details with itemized products | Yes |
-| DELETE | `/api/dues/{id}/` | Delete a due record | Yes |
 
 ### API Documentation
 

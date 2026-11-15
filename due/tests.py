@@ -333,17 +333,61 @@ class DueAPITestCase(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
-    def test_list_dues_multi_tenancy(self):
-        """User only retrieves dues associated with their own customers."""
-        due1 = Due.objects.create(customer=self.customer1, amount=300)
-        Due.objects.create(customer=self.customer2, amount=700)
-
+    def test_list_dues_requires_customer_id(self):
+        """Listing dues requires a customer_id query parameter."""
         response = self.client.get("/api/dues/")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("customer_id", response.data)
 
+    def test_list_dues_with_customer_id(self):
+        """Listing dues with customer_id returns all dues for that customer."""
+        due1 = Due.objects.create(customer=self.customer1, amount=300)
+        due2 = Due.objects.create(customer=self.customer1, amount=400)
+
+        response = self.client.get(f"/api/dues/?customer_id={self.customer1.id}")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         results = response.data.get("results", response.data)
-        self.assertEqual(len(results), 1)
-        self.assertEqual(results[0]["id"], due1.id)
+        self.assertEqual(len(results), 2)
+        due_ids = [d["id"] for d in results]
+        self.assertIn(due1.id, due_ids)
+        self.assertIn(due2.id, due_ids)
+
+    def test_list_dues_other_users_customer_returns_404(self):
+        """User cannot list dues for another user's customer (returns 404)."""
+        Due.objects.create(customer=self.customer2, amount=700)
+
+        # user1 attempts to query user2's customer
+        response = self.client.get(f"/api/dues/?customer_id={self.customer2.id}")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_due_cannot_be_edited(self):
+        """Dues cannot be edited (PUT/PATCH returns 405 Method Not Allowed)."""
+        due = Due.objects.create(customer=self.customer1, amount=100)
+
+        patch_response = self.client.patch(f"/api/dues/{due.id}/", {"amount": 500})
+        self.assertEqual(patch_response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+        put_response = self.client.put(f"/api/dues/{due.id}/", {"amount": 500})
+        self.assertEqual(put_response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+        due.refresh_from_db()
+        self.assertEqual(due.amount, 100)
+
+    def test_due_cannot_be_deleted(self):
+        """Dues cannot be deleted (DELETE returns 405 Method Not Allowed)."""
+        due = Due.objects.create(customer=self.customer1, amount=100)
+
+        delete_response = self.client.delete(f"/api/dues/{due.id}/")
+        self.assertEqual(delete_response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+        self.assertTrue(Due.objects.filter(id=due.id).exists())
+
+    def test_due_detail_other_user_forbidden(self):
+        """User cannot retrieve detail of another user's due (returns 404)."""
+        due_user2 = Due.objects.create(customer=self.customer2, amount=500)
+
+        response = self.client.get(f"/api/dues/{due_user2.id}/")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_due_detail_view(self):
         """Detail view returns due with products and customer details."""

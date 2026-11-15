@@ -20,13 +20,12 @@ from django.urls import path, include, re_path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from core.views import APINotFoundView
 
+
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/accounts/", include("accounts.urls")),
     path("api/customers/", include("customer.urls")),
-    path("api/customer/", include("customer.urls")),
     path("api/dues/", include("due.urls")),
-    path("api/due/", include("due.urls")),
     path("api/products/", include("product.urls")),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path(

@@ -1,6 +1,5 @@
-from rest_framework import viewsets, permissions, status
-from rest_framework.response import Response
-from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiResponse
+from rest_framework import viewsets, permissions, mixins
+from drf_spectacular.utils import extend_schema, extend_schema_view
 
 from .models import Customer
 from .serializers import CustomerListSerializer, CustomerDetailSerializer
@@ -21,38 +20,25 @@ from .serializers import CustomerListSerializer, CustomerDetailSerializer
     ),
     create=extend_schema(
         summary="Create customer",
-        description="Add a new customer under the authenticated shopkeeper.",
+        description="Add a new customer under the authenticated shopkeeper. Note: customers cannot be edited or deleted once created.",
         tags=["Customers"],
         request=CustomerDetailSerializer,
         responses={201: CustomerDetailSerializer},
     ),
-    update=extend_schema(
-        summary="Update customer details",
-        description="Update customer details (name, phone_number, address). Note: total_due_amount is strictly read-only.",
-        tags=["Customers"],
-        request=CustomerDetailSerializer,
-        responses={200: CustomerDetailSerializer},
-    ),
-    partial_update=extend_schema(
-        summary="Partially update customer details",
-        description="Partially update customer details (name, phone_number, address). Note: total_due_amount is strictly read-only.",
-        tags=["Customers"],
-        request=CustomerDetailSerializer,
-        responses={200: CustomerDetailSerializer},
-    ),
-    destroy=extend_schema(
-        summary="Delete customer",
-        description="Delete a customer and all their associated dues and deposits.",
-        tags=["Customers"],
-        responses={204: OpenApiResponse(description="Customer deleted successfully")},
-    ),
 )
-class CustomerViewSet(viewsets.ModelViewSet):
+class CustomerViewSet(
+    mixins.CreateModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.ListModelMixin,
+    viewsets.GenericViewSet,
+):
     """
-    ViewSet for CRUD operations on Customer.
+    ViewSet for Customer operations (Create, List, Retrieve).
+    Editing and Deleting are strictly disallowed.
     Restricted to authenticated shopkeepers and their own customers.
     """
     permission_classes = [permissions.IsAuthenticated]
+    http_method_names = ["get", "post", "head", "options"]
 
     def get_queryset(self):
         # Multi-tenancy: Only return customers belonging to the logged-in user
