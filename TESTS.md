@@ -38,6 +38,23 @@ Tests for Customer model attributes, validation, relationships, and balance calc
 - **test_total_due_amount_with_excess_deposit** - Balance returns negative when deposits exceed dues
 - **test_total_due_amount_without_deposits_flag** - Optional flag to compute gross due amount without subtracting deposits
 
+### CustomerAPITestCase
+Tests for Customer CRUD REST endpoints.
+- **test_create_customer_success** - Shopkeeper creates customer with all details; total_due_amount starts at 0
+- **test_create_customer_minimal_fields** - Create customer with only required name field
+- **test_create_customer_missing_name** - Validation error when name is missing
+- **test_create_customer_name_too_long** - Validation error when name exceeds 30 characters
+- **test_create_customer_unauthenticated** - Returns 401 when unauthenticated
+- **test_list_customers_fields** - List returns name, phone_number, and calculated total_due_amount
+- **test_list_customers_multi_tenancy_isolation** - Shopkeeper only sees their own customers
+- **test_customer_detail_view** - Detail view returns address, phone_number, and total_due_amount
+- **test_customer_detail_other_user_forbidden** - Accessing another shopkeeper's customer returns 404
+- **test_update_customer_details** - Update name, phone_number, address
+- **test_update_customer_cannot_modify_total_due_amount** - total_due_amount is read-only and ignores user modification attempts
+- **test_update_customer_other_user_forbidden** - Updating another shopkeeper's customer returns 404
+- **test_delete_customer_success** - Deleting customer removes customer record
+- **test_delete_customer_other_user_forbidden** - Deleting another shopkeeper's customer returns 404
+
 ---
 
 ## Product App Tests (`product/tests.py`)
@@ -71,6 +88,19 @@ Tests for Deposit model creation, amounts, and dates.
 
 ### DueManagerWorkflowTestCase
 - **test_complete_due_and_deposit_lifecycle** - End-to-end integration test verifying day-by-day due tracking, deposits, running balance, and cascade deletion
+
+### DueAPITestCase
+Tests for Due REST API endpoints.
+- **test_add_due_all_at_once_success** - Add due providing customer_id, products, and amount in a single request; total_due_amount updates
+- **test_add_due_date_cannot_be_changed_via_user** - User-supplied date is ignored; due date defaults to today
+- **test_add_due_is_edited_cannot_be_changed_via_user** - User-supplied is_edited is ignored; defaults to False
+- **test_add_due_discounted_amount** - Due amount can differ from sum of product prices
+- **test_add_due_with_existing_product** - Due can reference existing product by id
+- **test_add_due_invalid_customer** - Fails when customer_id does not exist
+- **test_add_due_other_users_customer_forbidden** - Fails when customer belongs to another shopkeeper
+- **test_add_due_unauthenticated** - Returns 401 when unauthenticated
+- **test_list_dues_multi_tenancy** - Shopkeeper only retrieves dues for their own customers
+- **test_due_detail_view** - Detail view returns full product and customer data
 
 ---
 

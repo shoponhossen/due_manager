@@ -1,6 +1,10 @@
 import datetime
 from django.test import TestCase
 from django.contrib.auth.models import User
+from django.utils import timezone
+from rest_framework.test import APITestCase
+from rest_framework import status
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from customer.models import Customer
 from product.models import Product
@@ -176,3 +180,180 @@ class DueManagerWorkflowTestCase(TestCase):
         self.assertEqual(Deposit.objects.filter(customer_id=cust_id).count(), 0)
         # Products remain in the catalog
         self.assertTrue(Product.objects.filter(id=tea.id).exists())
+
+
+class DueAPITestCase(APITestCase):
+    """Test cases for Due REST API endpoints (Add Due, List, Detail)."""
+
+    def setUp(self):
+        self.user1 = User.objects.create_user(username="shopkeeper_due1", password="password123")
+        self.user2 = User.objects.create_user(username="shopkeeper_due2", password="password123")
+
+        self.customer1 = Customer.objects.create(user=self.user1, name="Customer One")
+        self.customer2 = Customer.objects.create(user=self.user2, name="Customer Two")
+
+        refresh1 = RefreshToken.for_user(self.user1)
+        self.token1 = str(refresh1.access_token)
+
+        refresh2 = RefreshToken.for_user(self.user2)
+        self.token2 = str(refresh2.access_token)
+
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token1}")
+
+    def test_add_due_all_at_once_success(self):
+        """User provides all data at once: customer_id, products, and amount."""
+        payload = {
+            "customer_id": self.customer1.id,
+            "amount": 450,
+            "products": [
+                {
+                    "title": "Rice 5kg",
+                    "quantity": 1,
+                    "unit": "pice",
+                    "price": 320,
+                },
+                {
+                    "title": "Lentils",
+                    "quantity": 1000,
+                    "unit": "gram",
+                    "price": 140,
+                },
+            ],
+        }
+        response = self.client.post("/api/dues/", payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["amount"], 450)
+        self.assertEqual(response.data["date"], str(timezone.now().date()))
+        self.assertFalse(response.data["is_edited"])
+        self.assertEqual(len(response.data["products"]), 2)
+        self.assertEqual(response.data["customer"]["id"], self.customer1.id)
+
+        # Verify DB records
+        due = Due.objects.get(id=response.data["id"])
+        self.assertEqual(due.products.count(), 2)
+        self.assertEqual(due.amount, 450)
+
+        # Verify customer's total due amount is updated
+        self.assertEqual(self.customer1.total_due_amount(), 450)
+
+    def test_add_due_date_cannot_be_changed_via_user(self):
+        """User cannot override the date when adding a due."""
+        payload = {
+            "customer_id": self.customer1.id,
+            "amount": 200,
+            "date": "2020-01-01",  # User tries to pass past date
+            "products": [{"title": "Item", "quantity": 1, "unit": "pice", "price": 200}],
+        }
+        response = self.client.post("/api/dues/", payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        # Date must still be today, ignoring user input
+        self.assertEqual(response.data["date"], str(timezone.now().date()))
+        due = Due.objects.get(id=response.data["id"])
+        self.assertEqual(due.date, timezone.now().date())
+
+    def test_add_due_is_edited_cannot_be_changed_via_user(self):
+        """User cannot override the is_edited flag when adding a due."""
+        payload = {
+            "customer_id": self.customer1.id,
+            "amount": 100,
+            "is_edited": True,  # User tries to pass is_edited True
+            "products": [],
+        }
+        response = self.client.post("/api/dues/", payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertFalse(response.data["is_edited"])
+        due = Due.objects.get(id=response.data["id"])
+        self.assertFalse(due.is_edited)
+
+    def test_add_due_discounted_amount(self):
+        """Amount may differ from sum of product prices (shopkeeper discount)."""
+        payload = {
+            "customer_id": self.customer1.id,
+            "amount": 500,  # Discounted from 600
+            "products": [
+                {"title": "Oil", "quantity": 2, "unit": "pice", "price": 300},
+                {"title": "Spices", "quantity": 1, "unit": "pice", "price": 300},
+            ],
+        }
+        response = self.client.post("/api/dues/", payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["amount"], 500)
+
+    def test_add_due_with_existing_product(self):
+        """Due can link to an existing product by id."""
+        p = Product.objects.create(title="Existing Biscuit", quantity=1, unit="pice", price=25)
+        payload = {
+            "customer_id": self.customer1.id,
+            "amount": 25,
+            "products": [{"id": p.id}],
+        }
+        response = self.client.post("/api/dues/", payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(len(response.data["products"]), 1)
+        self.assertEqual(response.data["products"][0]["id"], p.id)
+
+    def test_add_due_invalid_customer(self):
+        """Adding due fails with invalid customer_id."""
+        payload = {
+            "customer_id": 99999,
+            "amount": 100,
+            "products": [],
+        }
+        response = self.client.post("/api/dues/", payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("customer_id", response.data)
+
+    def test_add_due_other_users_customer_forbidden(self):
+        """User cannot add a due to another user's customer."""
+        payload = {
+            "customer_id": self.customer2.id,  # customer2 belongs to user2
+            "amount": 100,
+            "products": [],
+        }
+        response = self.client.post("/api/dues/", payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("customer_id", response.data)
+
+    def test_add_due_unauthenticated(self):
+        """Unauthenticated request to add due fails."""
+        self.client.credentials()  # Remove auth
+        payload = {
+            "customer_id": self.customer1.id,
+            "amount": 100,
+            "products": [],
+        }
+        response = self.client.post("/api/dues/", payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_list_dues_multi_tenancy(self):
+        """User only retrieves dues associated with their own customers."""
+        due1 = Due.objects.create(customer=self.customer1, amount=300)
+        Due.objects.create(customer=self.customer2, amount=700)
+
+        response = self.client.get("/api/dues/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = response.data.get("results", response.data)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["id"], due1.id)
+
+    def test_due_detail_view(self):
+        """Detail view returns due with products and customer details."""
+        p = Product.objects.create(title="Tea", quantity=1, unit="pice", price=50)
+        due = Due.objects.create(customer=self.customer1, amount=50)
+        due.products.add(p)
+
+        response = self.client.get(f"/api/dues/{due.id}/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["amount"], 50)
+        self.assertEqual(response.data["customer"]["id"], self.customer1.id)
+        self.assertEqual(len(response.data["products"]), 1)

@@ -1,6 +1,9 @@
 from django.test import TestCase
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
+from rest_framework.test import APITestCase
+from rest_framework import status
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from customer.models import Customer
 from due.models import Due, Deposit
@@ -93,3 +96,186 @@ class CustomerModelTestCase(TestCase):
 
         self.assertEqual(customer.total_due_amount(include_deposits=False), 500)
         self.assertEqual(customer.total_due_amount(include_deposits=True), 300)
+
+
+class CustomerAPITestCase(APITestCase):
+    """Test cases for Customer REST API endpoints."""
+
+    def setUp(self):
+        self.user1 = User.objects.create_user(username="shopkeeper_api1", password="password123")
+        self.user2 = User.objects.create_user(username="shopkeeper_api2", password="password123")
+
+        refresh1 = RefreshToken.for_user(self.user1)
+        self.token1 = str(refresh1.access_token)
+
+        refresh2 = RefreshToken.for_user(self.user2)
+        self.token2 = str(refresh2.access_token)
+
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token1}")
+
+    def test_create_customer_success(self):
+        """User can create a new customer with all details."""
+        payload = {
+            "name": "Mahmud Hasan",
+            "phone_number": "01711223344",
+            "address": "Dhanmondi, Dhaka",
+        }
+        response = self.client.post("/api/customers/", payload)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["name"], "Mahmud Hasan")
+        self.assertEqual(response.data["phone_number"], "01711223344")
+        self.assertEqual(response.data["address"], "Dhanmondi, Dhaka")
+        self.assertEqual(response.data["total_due_amount"], 0)
+
+        # Confirm customer created in DB under user1
+        customer = Customer.objects.get(id=response.data["id"])
+        self.assertEqual(customer.user, self.user1)
+
+    def test_create_customer_minimal_fields(self):
+        """User can create customer with only required fields (name)."""
+        payload = {"name": "Only Name"}
+        response = self.client.post("/api/customers/", payload)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["name"], "Only Name")
+        self.assertIsNone(response.data["phone_number"])
+        self.assertIsNone(response.data["address"])
+
+    def test_create_customer_missing_name(self):
+        """Customer creation fails without a name."""
+        payload = {"phone_number": "01711223344"}
+        response = self.client.post("/api/customers/", payload)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("name", response.data)
+
+    def test_create_customer_name_too_long(self):
+        """Customer creation fails if name exceeds 30 characters."""
+        payload = {"name": "A" * 31}
+        response = self.client.post("/api/customers/", payload)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("name", response.data)
+
+    def test_create_customer_unauthenticated(self):
+        """Unauthenticated user cannot create a customer."""
+        self.client.credentials()  # Remove auth
+        response = self.client.post("/api/customers/", {"name": "Unauth Cust"})
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_list_customers_fields(self):
+        """List view returns name, phone_number, and total_due_amount."""
+        c1 = Customer.objects.create(user=self.user1, name="Customer A", phone_number="01911111111")
+        Due.objects.create(customer=c1, amount=600)
+        Deposit.objects.create(customer=c1, amount=150)
+
+        response = self.client.get("/api/customers/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = response.data.get("results", response.data)
+        self.assertEqual(len(results), 1)
+        item = results[0]
+        self.assertEqual(item["name"], "Customer A")
+        self.assertEqual(item["phone_number"], "01911111111")
+        self.assertEqual(item["total_due_amount"], 450)  # 600 - 150
+        # Address should not be exposed in compact list view
+        self.assertNotIn("address", item)
+
+    def test_list_customers_multi_tenancy_isolation(self):
+        """User only sees their own customers, not customers of other users."""
+        Customer.objects.create(user=self.user1, name="User1 Customer")
+        Customer.objects.create(user=self.user2, name="User2 Customer")
+
+        response = self.client.get("/api/customers/")
+        results = response.data.get("results", response.data)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["name"], "User1 Customer")
+
+        # Now test with user2 credentials
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token2}")
+        response2 = self.client.get("/api/customers/")
+        results2 = response2.data.get("results", response2.data)
+        self.assertEqual(len(results2), 1)
+        self.assertEqual(results2[0]["name"], "User2 Customer")
+
+    def test_customer_detail_view(self):
+        """Detail view returns full customer details including address and total_due_amount."""
+        c = Customer.objects.create(
+            user=self.user1,
+            name="Detailed Cust",
+            phone_number="01800000000",
+            address="Gulshan, Dhaka"
+        )
+        Due.objects.create(customer=c, amount=1200)
+
+        response = self.client.get(f"/api/customers/{c.id}/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["name"], "Detailed Cust")
+        self.assertEqual(response.data["phone_number"], "01800000000")
+        self.assertEqual(response.data["address"], "Gulshan, Dhaka")
+        self.assertEqual(response.data["total_due_amount"], 1200)
+
+    def test_customer_detail_other_user_forbidden(self):
+        """User cannot view detail of another user's customer (returns 404)."""
+        other_customer = Customer.objects.create(user=self.user2, name="Secret Cust")
+        response = self.client.get(f"/api/customers/{other_customer.id}/")
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_update_customer_details(self):
+        """User can update customer name, phone_number, and address."""
+        c = Customer.objects.create(user=self.user1, name="Original Name", address="Old Address")
+        payload = {
+            "name": "Updated Name",
+            "phone_number": "01799999999",
+            "address": "New Address",
+        }
+        response = self.client.patch(f"/api/customers/{c.id}/", payload)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["name"], "Updated Name")
+        self.assertEqual(response.data["phone_number"], "01799999999")
+        self.assertEqual(response.data["address"], "New Address")
+
+    def test_update_customer_cannot_modify_total_due_amount(self):
+        """total_due_amount is read-only and cannot be altered by the user."""
+        c = Customer.objects.create(user=self.user1, name="Balance Cust")
+        Due.objects.create(customer=c, amount=500)
+
+        # Attempt to overwrite total_due_amount to 0 or 99999
+        payload = {
+            "name": "Balance Cust",
+            "total_due_amount": 99999,
+        }
+        response = self.client.patch(f"/api/customers/{c.id}/", payload)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # Should remain 500, not 99999
+        self.assertEqual(response.data["total_due_amount"], 500)
+        self.assertEqual(c.total_due_amount(), 500)
+
+    def test_update_customer_other_user_forbidden(self):
+        """User cannot edit another user's customer (returns 404)."""
+        other_customer = Customer.objects.create(user=self.user2, name="Other Cust")
+        response = self.client.patch(f"/api/customers/{other_customer.id}/", {"name": "Hacked"})
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_delete_customer_success(self):
+        """User can delete their customer."""
+        c = Customer.objects.create(user=self.user1, name="To Delete")
+        response = self.client.delete(f"/api/customers/{c.id}/")
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Customer.objects.filter(id=c.id).exists())
+
+    def test_delete_customer_other_user_forbidden(self):
+        """User cannot delete another user's customer (returns 404)."""
+        other_customer = Customer.objects.create(user=self.user2, name="Other Cust")
+        response = self.client.delete(f"/api/customers/{other_customer.id}/")
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertTrue(Customer.objects.filter(id=other_customer.id).exists())

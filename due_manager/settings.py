@@ -185,6 +185,18 @@ SPECTACULAR_SETTINGS = {
             "name": "User Profile",
             "description": "User profile management (username is read-only after registration)",
         },
+        {
+            "name": "Customers",
+            "description": "Customer management and ledger balances",
+        },
+        {
+            "name": "Dues",
+            "description": "Due transactions and itemized credit entries",
+        },
+        {
+            "name": "Products",
+            "description": "Product catalog",
+        },
     ],
     "COMPONENT_SPLIT_REQUEST": True,
     "SCHEMA_PATH_PREFIX": r"/api/",
