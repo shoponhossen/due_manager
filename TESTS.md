@@ -61,7 +61,7 @@ Tests for Customer REST endpoints.
 ### ProductModelTestCase
 Tests for Product model attributes, units, prices, and deduplication rules.
 - **test_create_product** - Test creating product with title, quantity, unit, and price
-- **test_product_units** - Test supported unit choices (gram, pice, piece)
+- **test_product_units** - Test supported unit choices (piece, kg)
 - **test_duplicate_products_allowed** - Verify multiple products can share the same name and price
 - **test_title_max_length_validation** - Verify title field enforces max length of 100 characters
 - **test_default_values** - Verify default quantity, unit, and price values

@@ -17,8 +17,8 @@ class DueModelTestCase(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="shopkeeper2", password="password123")
         self.customer = Customer.objects.create(user=self.user, name="John Doe")
-        self.product1 = Product.objects.create(title="Flour", quantity=2, unit="gram", price=100)
-        self.product2 = Product.objects.create(title="Milk", quantity=1, unit="pice", price=80)
+        self.product1 = Product.objects.create(title="Flour", quantity=2, unit="kg", price=100)
+        self.product2 = Product.objects.create(title="Milk", quantity=1, unit="piece", price=80)
 
     def test_create_due_with_products(self):
         due = Due.objects.create(
@@ -133,8 +133,8 @@ class DueManagerWorkflowTestCase(TestCase):
         self.assertEqual(self.customer.total_due_amount(), 0)
 
         # 2. Customer takes goods on Day 1: Due created with multiple products
-        tea = Product.objects.create(title="Tea Pack", quantity=1, unit="pice", price=120)
-        sugar = Product.objects.create(title="Sugar", quantity=1000, unit="gram", price=130)
+        tea = Product.objects.create(title="Tea Pack", quantity=1, unit="piece", price=120)
+        sugar = Product.objects.create(title="Sugar", quantity=1, unit="kg", price=130)
 
         due1 = Due.objects.create(
             customer=self.customer,
@@ -145,7 +145,7 @@ class DueManagerWorkflowTestCase(TestCase):
         self.assertEqual(self.customer.total_due_amount(), 240)
 
         # 3. Customer takes more goods on Day 2
-        oil = Product.objects.create(title="Mustard Oil", quantity=1, unit="pice", price=180)
+        oil = Product.objects.create(title="Mustard Oil", quantity=1, unit="piece", price=180)
         due2 = Due.objects.create(
             customer=self.customer,
             amount=180,
@@ -207,16 +207,16 @@ class DueAPITestCase(APITestCase):
             "amount": 450,
             "products": [
                 {
-                    "title": "Rice 5kg",
-                    "quantity": 1,
-                    "unit": "pice",
-                    "price": 320,
+                    "title": "Rice",
+                    "quantity": 0.500,
+                    "unit": "kg",
+                    "price": 200,
                 },
                 {
                     "title": "Lentils",
-                    "quantity": 1000,
-                    "unit": "gram",
-                    "price": 140,
+                    "quantity": 12,
+                    "unit": "piece",
+                    "price": 30,
                 },
             ],
         }
@@ -227,6 +227,10 @@ class DueAPITestCase(APITestCase):
         self.assertEqual(response.data["date"], str(timezone.now().date()))
         self.assertFalse(response.data["is_edited"])
         self.assertEqual(len(response.data["products"]), 2)
+        products_by_title = {p["title"]: p for p in response.data["products"]}
+        self.assertEqual(products_by_title["Rice"]["quantity"], "0.500")
+        self.assertEqual(products_by_title["Rice"]["total_price"], 100)
+        self.assertEqual(products_by_title["Lentils"]["total_price"], 360)
         self.assertEqual(response.data["customer"]["id"], self.customer1.id)
 
         # Verify DB records
@@ -243,7 +247,7 @@ class DueAPITestCase(APITestCase):
             "customer_id": self.customer1.id,
             "amount": 200,
             "date": "2020-01-01",  # User tries to pass past date
-            "products": [{"title": "Item", "quantity": 1, "unit": "pice", "price": 200}],
+            "products": [{"title": "Item", "quantity": 1, "unit": "piece", "price": 200}],
         }
         response = self.client.post("/api/dues/", payload, format="json")
 
@@ -272,10 +276,10 @@ class DueAPITestCase(APITestCase):
         """Amount may differ from sum of product prices (shopkeeper discount)."""
         payload = {
             "customer_id": self.customer1.id,
-            "amount": 500,  # Discounted from 600
+            "amount": 500,  # Discounted from 900
             "products": [
-                {"title": "Oil", "quantity": 2, "unit": "pice", "price": 300},
-                {"title": "Spices", "quantity": 1, "unit": "pice", "price": 300},
+                {"title": "Oil", "quantity": 2, "unit": "piece", "price": 300},
+                {"title": "Spices", "quantity": 1, "unit": "piece", "price": 300},
             ],
         }
         response = self.client.post("/api/dues/", payload, format="json")
@@ -285,7 +289,7 @@ class DueAPITestCase(APITestCase):
 
     def test_add_due_with_existing_product(self):
         """Due can link to an existing product by id."""
-        p = Product.objects.create(title="Existing Biscuit", quantity=1, unit="pice", price=25)
+        p = Product.objects.create(title="Existing Biscuit", quantity=1, unit="piece", price=25)
         payload = {
             "customer_id": self.customer1.id,
             "amount": 25,
@@ -391,7 +395,7 @@ class DueAPITestCase(APITestCase):
 
     def test_due_detail_view(self):
         """Detail view returns due with products and customer details."""
-        p = Product.objects.create(title="Tea", quantity=1, unit="pice", price=50)
+        p = Product.objects.create(title="Tea", quantity=1, unit="piece", price=50)
         due = Due.objects.create(customer=self.customer1, amount=50)
         due.products.add(p)
 
@@ -412,6 +416,40 @@ class DueAPITestCase(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("amount", response.data)
+
+    def test_add_due_case_insensitive_units_and_decimal_qty(self):
+        """Units accept Piece/KG case-insensitively and decimal quantities like 0.250."""
+        payload = {
+            "customer_id": self.customer1.id,
+            "amount": 150,
+            "products": [
+                {"title": "Sugar", "quantity": "0.250", "unit": "KG", "price": 120},
+                {"title": "Pen", "quantity": 12, "unit": "Piece", "price": 10},
+            ],
+        }
+        response = self.client.post("/api/dues/", payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        products_by_title = {p["title"]: p for p in response.data["products"]}
+        self.assertEqual(products_by_title["Sugar"]["unit"], "kg")
+        self.assertEqual(products_by_title["Sugar"]["quantity"], "0.250")
+        self.assertEqual(products_by_title["Sugar"]["total_price"], 30)
+        self.assertEqual(products_by_title["Pen"]["unit"], "piece")
+        self.assertEqual(products_by_title["Pen"]["total_price"], 120)
+
+    def test_add_due_invalid_unit_rejected(self):
+        """Removed units like gram or pice are rejected."""
+        payload = {
+            "customer_id": self.customer1.id,
+            "amount": 100,
+            "products": [
+                {"title": "Sugar", "quantity": 0.5, "unit": "gram", "price": 100},
+            ],
+        }
+        response = self.client.post("/api/dues/", payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("unit", response.data)
 
 
 class DepositAPITestCase(APITestCase):

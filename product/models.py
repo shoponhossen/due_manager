@@ -1,3 +1,5 @@
+from decimal import Decimal
+from django.core.validators import MinValueValidator
 from django.db import models
 
 
@@ -7,16 +9,20 @@ class Product(models.Model):
     Duplicates with the same name and price are allowed.
     """
     class UnitChoices(models.TextChoices):
-        GRAM = "gram", "Gram"
-        PICE = "pice", "Pice"
         PIECE = "piece", "Piece"
+        KG = "kg", "KG"
 
     title = models.CharField(max_length=100)
-    quantity = models.PositiveIntegerField(default=1)
+    quantity = models.DecimalField(
+        max_digits=10,
+        decimal_places=3,
+        default=Decimal("1.000"),
+        validators=[MinValueValidator(Decimal("0"))],
+    )
     unit = models.CharField(
         max_length=10,
         choices=UnitChoices.choices,
-        default=UnitChoices.PICE
+        default=UnitChoices.PIECE,
     )
     price = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -25,8 +31,21 @@ class Product(models.Model):
     class Meta:
         ordering = ["-id"]
 
+    @property
+    def total_price(self):
+        """Calculates total price as quantity * unit price."""
+        total = Decimal(str(self.quantity)) * Decimal(self.price)
+        if total == total.to_integral_value():
+            return int(total)
+        return float(total)
+
     def __str__(self):
-        return f"{self.title} ({self.quantity} {self.unit})"
+        qty = Decimal(str(self.quantity))
+        if qty == qty.to_integral_value():
+            qty_display = str(int(qty))
+        else:
+            qty_display = f"{qty.quantize(Decimal('0.001'))}"
+        return f"{qty_display} {self.get_unit_display()} {self.title} price is {self.total_price}"
 
     @property
     def due(self):

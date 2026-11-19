@@ -118,6 +118,22 @@ class DueSerializer(serializers.ModelSerializer):
         return due
 
 
+class DueCreateSerializer(serializers.Serializer):
+    """OpenAPI request schema serializer for creating a Due."""
+    customer_id = serializers.IntegerField(
+        help_text="ID of the customer belonging to the authenticated shopkeeper."
+    )
+    amount = serializers.IntegerField(
+        min_value=0,
+        help_text="Total due amount (may differ from sum of product prices for discounts)."
+    )
+    products = ProductSerializer(
+        many=True,
+        required=False,
+        help_text="List of itemized products (new product objects, or existing product IDs like 1 or {\"id\": 1})."
+    )
+
+
 class DepositSerializer(serializers.ModelSerializer):
     """
     Serializer for Deposit records.
@@ -190,3 +206,14 @@ class DepositSerializer(serializers.ModelSerializer):
             amount=amount,
             date=timezone.now().date(),
         )
+
+
+class DepositCreateSerializer(serializers.Serializer):
+    """OpenAPI request schema serializer for creating a Deposit."""
+    customer_id = serializers.IntegerField(
+        help_text="ID of the customer belonging to the authenticated shopkeeper."
+    )
+    amount = serializers.IntegerField(
+        min_value=0,
+        help_text="Deposit payment amount."
+    )

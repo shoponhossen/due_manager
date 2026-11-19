@@ -1,9 +1,14 @@
 from rest_framework import viewsets, permissions, mixins
 from rest_framework.exceptions import ValidationError, NotFound
-from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
+from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter, OpenApiExample
 
 from .models import Due, Deposit
-from .serializers import DueSerializer, DepositSerializer
+from .serializers import (
+    DueSerializer,
+    DueCreateSerializer,
+    DepositSerializer,
+    DepositCreateSerializer,
+)
 from customer.models import Customer
 
 
@@ -31,10 +36,47 @@ from customer.models import Customer
     ),
     create=extend_schema(
         summary="Add Due",
-        description="Record a new due balance for a customer. Provide customer_id, amount, and itemized product(s) in a single request. date and is_edited are automatic and cannot be altered. Dues cannot be edited or deleted once created.",
+        description=(
+            "Record a new due balance for a customer. Provide customer_id, amount, and itemized product(s) "
+            "in a single request. Products can be new product objects, existing product IDs (e.g. 1), or {\"id\": 1}. "
+            "date and is_edited are automatic and cannot be altered. Dues cannot be edited or deleted once created."
+        ),
         tags=["Dues"],
-        request=DueSerializer,
+        request=DueCreateSerializer,
         responses={201: DueSerializer},
+        examples=[
+            OpenApiExample(
+                "Add Due with New Products",
+                value={
+                    "customer_id": 1,
+                    "amount": 220,
+                    "products": [
+                        {
+                            "title": "Rice",
+                            "quantity": 0.500,
+                            "unit": "kg",
+                            "price": 200,
+                        },
+                        {
+                            "title": "Soap",
+                            "quantity": 3,
+                            "unit": "piece",
+                            "price": 40,
+                        },
+                    ],
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
+                "Add Due with Existing Product ID",
+                value={
+                    "customer_id": 1,
+                    "amount": 25,
+                    "products": [{"id": 1}],
+                },
+                request_only=True,
+            ),
+        ],
     ),
 )
 class DueViewSet(
@@ -106,8 +148,18 @@ class DueViewSet(
         summary="Add Deposit",
         description="Record a new deposit payment for a customer belonging to the authenticated shopkeeper. date is automatic and cannot be altered. Deposits cannot be edited or deleted once created.",
         tags=["Deposits"],
-        request=DepositSerializer,
+        request=DepositCreateSerializer,
         responses={201: DepositSerializer},
+        examples=[
+            OpenApiExample(
+                "Add Deposit",
+                value={
+                    "customer_id": 1,
+                    "amount": 200,
+                },
+                request_only=True,
+            ),
+        ],
     ),
 )
 class DepositViewSet(

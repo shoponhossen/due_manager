@@ -59,7 +59,7 @@ python manage.py runserver
 
 | Method | Endpoint | Description | Auth Required |
 |--------|----------|-------------|---------------|
-| GET | `/api/customers/` | List customers (`name`, `phone_number`, `total_due_amount`) | Yes |
+| GET | `/api/customers/` | List customers (`name`, `phone_number`, `address`, `total_due_amount`) | Yes |
 | POST | `/api/customers/` | Create new customer (cannot be edited or deleted once created) | Yes |
 | GET | `/api/customers/{id}/` | Get customer details (including address, due balance) | Yes |
 
@@ -70,6 +70,14 @@ python manage.py runserver
 | GET | `/api/dues/?customer_id={id}` | List all dues for a specific customer belonging to the shopkeeper | Yes |
 | POST | `/api/dues/` | Add due (customer_id, products, amount; cannot be edited or deleted) | Yes |
 | GET | `/api/dues/{id}/` | Get due details with itemized products | Yes |
+
+### Deposits
+
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| GET | `/api/deposits/` | List deposits for the shopkeeper's customers (optional `?customer_id={id}`) | Yes |
+| POST | `/api/deposits/` | Add deposit (`customer_id`, `amount`; cannot be edited or deleted) | Yes |
+| GET | `/api/deposits/{id}/` | Get deposit details | Yes |
 
 ### API Documentation
 
