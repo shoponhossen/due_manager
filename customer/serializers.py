@@ -4,7 +4,7 @@ from .models import Customer
 
 class CustomerListSerializer(serializers.ModelSerializer):
     """
-    Serializer for listing customers with name, phone_number, and total_due_amount.
+    Serializer for listing customers with name, phone_number, address, and total_due_amount.
     """
     total_due_amount = serializers.IntegerField(read_only=True)
 
@@ -14,6 +14,7 @@ class CustomerListSerializer(serializers.ModelSerializer):
             "id",
             "name",
             "phone_number",
+            "address",
             "total_due_amount",
         ]
         read_only_fields = ["id", "total_due_amount"]

@@ -191,6 +191,10 @@ SPECTACULAR_SETTINGS = {
             "description": "Due transactions and itemized credit entries",
         },
         {
+            "name": "Deposits",
+            "description": "Customer deposit payments against dues",
+        },
+        {
             "name": "Products",
             "description": "Product catalog",
         },

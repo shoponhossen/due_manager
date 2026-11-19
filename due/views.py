@@ -2,8 +2,8 @@ from rest_framework import viewsets, permissions, mixins
 from rest_framework.exceptions import ValidationError, NotFound
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
 
-from .models import Due
-from .serializers import DueSerializer
+from .models import Due, Deposit
+from .serializers import DueSerializer, DepositSerializer
 from customer.models import Customer
 
 
@@ -76,5 +76,79 @@ class DueViewSet(
                 raise NotFound(detail="Customer not found.")
 
             queryset = queryset.filter(customer_id=customer_id)
+
+        return queryset
+
+
+@extend_schema_view(
+    list=extend_schema(
+        summary="List deposits",
+        description="Retrieve deposits belonging to the authenticated shopkeeper's customers. Optionally filter by customer_id.",
+        tags=["Deposits"],
+        parameters=[
+            OpenApiParameter(
+                name="customer_id",
+                type=int,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Optional ID of the shopkeeper's customer whose deposits to retrieve",
+            )
+        ],
+        responses={200: DepositSerializer(many=True)},
+    ),
+    retrieve=extend_schema(
+        summary="Deposit detail",
+        description="Retrieve details of a specific deposit record.",
+        tags=["Deposits"],
+        responses={200: DepositSerializer},
+    ),
+    create=extend_schema(
+        summary="Add Deposit",
+        description="Record a new deposit payment for a customer belonging to the authenticated shopkeeper. date is automatic and cannot be altered. Deposits cannot be edited or deleted once created.",
+        tags=["Deposits"],
+        request=DepositSerializer,
+        responses={201: DepositSerializer},
+    ),
+)
+class DepositViewSet(
+    mixins.CreateModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.ListModelMixin,
+    viewsets.GenericViewSet,
+):
+    """
+    ViewSet for recording and viewing Deposits.
+    Editing and deleting are strictly disallowed.
+    Restricted to authenticated shopkeepers and their own customers.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = DepositSerializer
+    http_method_names = ["get", "post", "head", "options"]
+
+    def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return Deposit.objects.none()
+
+        user = self.request.user
+        queryset = Deposit.objects.filter(customer__user=user).select_related("customer")
+
+        if self.action == "list":
+            if "customer_id" in self.request.query_params:
+                customer_param = self.request.query_params.get("customer_id")
+            elif "customer" in self.request.query_params:
+                customer_param = self.request.query_params.get("customer")
+            else:
+                customer_param = None
+
+            if customer_param is not None:
+                try:
+                    customer_id = int(customer_param)
+                except (ValueError, TypeError):
+                    raise ValidationError({"customer_id": ["customer_id must be a valid integer."]})
+
+                if not Customer.objects.filter(id=customer_id, user=user).exists():
+                    raise NotFound(detail="Customer not found.")
+
+                queryset = queryset.filter(customer_id=customer_id)
 
         return queryset

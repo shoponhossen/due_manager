@@ -401,3 +401,171 @@ class DueAPITestCase(APITestCase):
         self.assertEqual(response.data["amount"], 50)
         self.assertEqual(response.data["customer"]["id"], self.customer1.id)
         self.assertEqual(len(response.data["products"]), 1)
+
+    def test_add_due_missing_amount_fails(self):
+        """Adding due fails with validation error when amount is omitted."""
+        payload = {
+            "customer_id": self.customer1.id,
+            "products": [],
+        }
+        response = self.client.post("/api/dues/", payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("amount", response.data)
+
+
+class DepositAPITestCase(APITestCase):
+    """Test cases for Deposit REST API endpoints (Create, List, Detail)."""
+
+    def setUp(self):
+        self.user1 = User.objects.create_user(username="shopkeeper_dep1", password="password123")
+        self.user2 = User.objects.create_user(username="shopkeeper_dep2", password="password123")
+
+        self.customer1 = Customer.objects.create(user=self.user1, name="Customer Dep One")
+        self.customer2 = Customer.objects.create(user=self.user2, name="Customer Dep Two")
+
+        refresh1 = RefreshToken.for_user(self.user1)
+        self.token1 = str(refresh1.access_token)
+
+        refresh2 = RefreshToken.for_user(self.user2)
+        self.token2 = str(refresh2.access_token)
+
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token1}")
+
+    def test_create_deposit_success(self):
+        """User creates deposit for their customer; total_due_amount decreases."""
+        Due.objects.create(customer=self.customer1, amount=1000)
+        self.assertEqual(self.customer1.total_due_amount(), 1000)
+
+        payload = {
+            "customer_id": self.customer1.id,
+            "amount": 400,
+        }
+        response = self.client.post("/api/deposits/", payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["amount"], 400)
+        self.assertEqual(response.data["date"], str(timezone.now().date()))
+        self.assertEqual(response.data["customer"]["id"], self.customer1.id)
+
+        # Total due amount is now 1000 - 400 = 600
+        self.assertEqual(self.customer1.total_due_amount(), 600)
+
+    def test_create_deposit_missing_amount(self):
+        """Creating deposit fails when amount is omitted."""
+        payload = {"customer_id": self.customer1.id}
+        response = self.client.post("/api/deposits/", payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("amount", response.data)
+
+    def test_create_deposit_missing_customer_id(self):
+        """Creating deposit fails when customer_id is omitted."""
+        payload = {"amount": 500}
+        response = self.client.post("/api/deposits/", payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("customer_id", response.data)
+
+    def test_create_deposit_other_users_customer_forbidden(self):
+        """User cannot create a deposit for another shopkeeper's customer."""
+        payload = {
+            "customer_id": self.customer2.id,
+            "amount": 300,
+        }
+        response = self.client.post("/api/deposits/", payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("customer_id", response.data)
+
+    def test_create_deposit_date_cannot_be_changed_via_user(self):
+        """User-supplied date is ignored; defaults to today."""
+        payload = {
+            "customer_id": self.customer1.id,
+            "amount": 250,
+            "date": "2020-01-01",
+        }
+        response = self.client.post("/api/deposits/", payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["date"], str(timezone.now().date()))
+
+    def test_create_deposit_unauthenticated(self):
+        """Unauthenticated request to create deposit fails."""
+        self.client.credentials()
+        payload = {
+            "customer_id": self.customer1.id,
+            "amount": 200,
+        }
+        response = self.client.post("/api/deposits/", payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_list_deposits_all_user_customers(self):
+        """Listing deposits returns deposits of shopkeeper's customers."""
+        d1 = Deposit.objects.create(customer=self.customer1, amount=100)
+        d2 = Deposit.objects.create(customer=self.customer1, amount=200)
+        # Another user's deposit
+        Deposit.objects.create(customer=self.customer2, amount=500)
+
+        response = self.client.get("/api/deposits/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = response.data.get("results", response.data)
+        self.assertEqual(len(results), 2)
+        deposit_ids = [d["id"] for d in results]
+        self.assertIn(d1.id, deposit_ids)
+        self.assertIn(d2.id, deposit_ids)
+
+    def test_list_deposits_filtered_by_customer_id(self):
+        """Listing deposits can be filtered by customer_id."""
+        c1b = Customer.objects.create(user=self.user1, name="Customer Dep 1B")
+        d1 = Deposit.objects.create(customer=self.customer1, amount=150)
+        Deposit.objects.create(customer=c1b, amount=350)
+
+        response = self.client.get(f"/api/deposits/?customer_id={self.customer1.id}")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = response.data.get("results", response.data)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["id"], d1.id)
+
+    def test_list_deposits_other_user_customer_returns_404(self):
+        """Filtering deposits by another user's customer returns 404."""
+        response = self.client.get(f"/api/deposits/?customer_id={self.customer2.id}")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_deposit_detail_view(self):
+        """Detail view returns full deposit information."""
+        deposit = Deposit.objects.create(customer=self.customer1, amount=750)
+
+        response = self.client.get(f"/api/deposits/{deposit.id}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["amount"], 750)
+        self.assertEqual(response.data["customer"]["id"], self.customer1.id)
+
+    def test_deposit_detail_other_user_forbidden(self):
+        """User cannot access detail of another user's deposit (returns 404)."""
+        dep_user2 = Deposit.objects.create(customer=self.customer2, amount=800)
+
+        response = self.client.get(f"/api/deposits/{dep_user2.id}/")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_deposit_cannot_be_edited(self):
+        """Deposits cannot be edited (PUT/PATCH returns 405 Method Not Allowed)."""
+        deposit = Deposit.objects.create(customer=self.customer1, amount=300)
+
+        patch_res = self.client.patch(f"/api/deposits/{deposit.id}/", {"amount": 900})
+        self.assertEqual(patch_res.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+        put_res = self.client.put(f"/api/deposits/{deposit.id}/", {"amount": 900})
+        self.assertEqual(put_res.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+        deposit.refresh_from_db()
+        self.assertEqual(deposit.amount, 300)
+
+    def test_deposit_cannot_be_deleted(self):
+        """Deposits cannot be deleted (DELETE returns 405 Method Not Allowed)."""
+        deposit = Deposit.objects.create(customer=self.customer1, amount=300)
+
+        del_res = self.client.delete(f"/api/deposits/{deposit.id}/")
+        self.assertEqual(del_res.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertTrue(Deposit.objects.filter(id=deposit.id).exists())

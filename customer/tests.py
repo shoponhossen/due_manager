@@ -166,8 +166,13 @@ class CustomerAPITestCase(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_list_customers_fields(self):
-        """List view returns name, phone_number, and total_due_amount."""
-        c1 = Customer.objects.create(user=self.user1, name="Customer A", phone_number="01911111111")
+        """List view returns name, phone_number, address, and total_due_amount."""
+        c1 = Customer.objects.create(
+            user=self.user1,
+            name="Customer A",
+            phone_number="01911111111",
+            address="Mirpur, Dhaka",
+        )
         Due.objects.create(customer=c1, amount=600)
         Deposit.objects.create(customer=c1, amount=150)
 
@@ -179,9 +184,8 @@ class CustomerAPITestCase(APITestCase):
         item = results[0]
         self.assertEqual(item["name"], "Customer A")
         self.assertEqual(item["phone_number"], "01911111111")
+        self.assertEqual(item["address"], "Mirpur, Dhaka")
         self.assertEqual(item["total_due_amount"], 450)  # 600 - 150
-        # Address should not be exposed in compact list view
-        self.assertNotIn("address", item)
 
     def test_list_customers_multi_tenancy_isolation(self):
         """User only sees their own customers, not customers of other users."""

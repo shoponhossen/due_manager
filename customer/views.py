@@ -8,7 +8,7 @@ from .serializers import CustomerListSerializer, CustomerDetailSerializer
 @extend_schema_view(
     list=extend_schema(
         summary="List customers",
-        description="Retrieve a list of customers belonging to the authenticated shopkeeper with name, phone number, and current total due amount.",
+        description="Retrieve a list of customers belonging to the authenticated shopkeeper with name, phone number, address, and current total due amount.",
         tags=["Customers"],
         responses={200: CustomerListSerializer(many=True)},
     ),
