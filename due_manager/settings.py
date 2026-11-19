@@ -145,7 +145,7 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 30,
 }
 
-CORS_ALLOWED_ORIGINS = ["*"]
+# CORS_ALLOWED_ORIGINS = [""]
 # If you send cookies or session authentication, also add:
 CORS_ALLOW_CREDENTIALS = True
 
