@@ -145,10 +145,7 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 30,
 }
 
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
+CORS_ALLOWED_ORIGINS = ["*"]
 # If you send cookies or session authentication, also add:
 CORS_ALLOW_CREDENTIALS = True
 
@@ -207,9 +204,6 @@ SPECTACULAR_SETTINGS = {
         "displayOperationId": False,
         "filter": True,
     },
-    "SERVERS": [
-        {"url": "http://localhost:8000", "description": "Development server"},
-    ],
     "SECURITY": [
         {
             "bearerAuth": [],
